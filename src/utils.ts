@@ -22,27 +22,85 @@ export function formatUSDate(dateStr: string): string {
   return `${month}/${day}/${year}`;
 }
 
-export const CARC_SUGGESTIONS: Record<string, { groupCode: 'CO' | 'PR' | 'OA', carc: string, rarc?: string }> = {
+export const CARC_SUGGESTIONS: Record<string, { groupCode: 'CO' | 'PR' | 'OA' | 'PI' | 'CR', carc: string, rarc?: string }> = {
+  // COB & Other Insurance
   'cob': { groupCode: 'CO', carc: '22', rarc: 'N24' },
   'coordination of benefits': { groupCode: 'CO', carc: '22', rarc: 'N24' },
+  'primary payer': { groupCode: 'CO', carc: '22' },
   'missing eob': { groupCode: 'CO', carc: '236' },
-  'contractual': { groupCode: 'CO', carc: '45' },
+  'other insurance': { groupCode: 'CO', carc: '22' },
+  
+  // Patient Responsibility
   'deductible': { groupCode: 'PR', carc: '1' },
   'coinsurance': { groupCode: 'PR', carc: '2' },
   'copay': { groupCode: 'PR', carc: '3' },
-  'duplicate': { groupCode: 'CO', carc: '18' },
+  'patient responsibility': { groupCode: 'PR', carc: '3' },
+
+  // Contractual & Bundling
+  'contractual': { groupCode: 'CO', carc: '45' },
+  'fee schedule': { groupCode: 'CO', carc: '45' },
+  'maximum allowance': { groupCode: 'CO', carc: '45' },
+  'bundle': { groupCode: 'CO', carc: '97', rarc: 'M15' },
+  'inclusive': { groupCode: 'CO', carc: '97', rarc: 'M15' },
+  'mutually exclusive': { groupCode: 'CO', carc: '97' },
+  'unbundled': { groupCode: 'CO', carc: '97' },
+
+  // Coverage & Medical Necessity
   'not covered': { groupCode: 'CO', carc: '96' },
-  'medical necessity': { groupCode: 'CO', carc: '50' },
   'non-covered': { groupCode: 'CO', carc: '96' },
+  'medical necessity': { groupCode: 'CO', carc: '50', rarc: 'M115' },
   'experimental': { groupCode: 'CO', carc: '55' },
   'investigational': { groupCode: 'CO', carc: '55' },
+  'routine': { groupCode: 'CO', carc: '119' },
+  'preventive': { groupCode: 'CO', carc: '119' },
+
+  // Authorization & Precertification
   'prior authorization': { groupCode: 'CO', carc: '197' },
   'precertification': { groupCode: 'CO', carc: '197' },
+  'authorization absent': { groupCode: 'CO', carc: '197' },
+  'authorization exceeded': { groupCode: 'CO', carc: '198' },
+  'referral absent': { groupCode: 'CO', carc: '8' },
+  'referral missing': { groupCode: 'CO', carc: '8' },
+
+  // Timely Filing
   'timely filing': { groupCode: 'CO', carc: '29' },
+  'time limit': { groupCode: 'CO', carc: '29' },
+  'filing limit': { groupCode: 'CO', carc: '29' },
+
+  // Eligibility & Enrollment
   'terminated': { groupCode: 'PR', carc: '27' },
+  'not eligible': { groupCode: 'PR', carc: '27' },
+  'coverage expired': { groupCode: 'PR', carc: '27' },
+  'inactive': { groupCode: 'PR', carc: '27' },
+  'not enrolled': { groupCode: 'PR', carc: '26' },
+  'coverage not in effect': { groupCode: 'PR', carc: '26' },
+
+  // Duplicates
+  'duplicate': { groupCode: 'CO', carc: '18' },
   'duplicate claim': { groupCode: 'CO', carc: '18' },
-  'bundle': { groupCode: 'CO', carc: '97' },
-  'inclusive': { groupCode: 'CO', carc: '97' },
+  'previously processed': { groupCode: 'CO', carc: '18' },
+  'already paid': { groupCode: 'CO', carc: '18' },
+
+  // Coding & Documentation
+  'modifier missing': { groupCode: 'CO', carc: '4' },
+  'invalid modifier': { groupCode: 'CO', carc: '4' },
+  'inconsistent modifier': { groupCode: 'CO', carc: '4' },
+  'diagnosis inconsistent': { groupCode: 'CO', carc: '11' },
+  'procedure inconsistent': { groupCode: 'CO', carc: '11' },
+  'documentation required': { groupCode: 'CO', carc: '16', rarc: 'M127' },
+  'missing documentation': { groupCode: 'CO', carc: '16', rarc: 'M127' },
+  'medical records': { groupCode: 'CO', carc: '16', rarc: 'M127' },
+  'invalid code': { groupCode: 'CO', carc: '16' },
+  'missing code': { groupCode: 'CO', carc: '16' },
+  'ndc missing': { groupCode: 'CO', carc: '16', rarc: 'M119' },
+  'invalid ndc': { groupCode: 'CO', carc: '16', rarc: 'M119' },
+
+  // Provider Issues
+  'provider not eligible': { groupCode: 'CO', carc: 'B7' },
+  'out of network': { groupCode: 'PR', carc: '242' },
+  'non-participating': { groupCode: 'PR', carc: '242' },
+  'taxonomy missing': { groupCode: 'CO', carc: '16', rarc: 'N290' },
+  'npi missing': { groupCode: 'CO', carc: '16', rarc: 'N257' },
 };
 
 export function getSuggestedCodes(reason: string) {

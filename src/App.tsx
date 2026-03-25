@@ -70,8 +70,8 @@ const INITIAL_DATA: EOBData = {
   denialReason: '',
   suggestedCodes: { groupCode: AdjustmentGroupCode.OA, carc: '96' },
   useSuggested: true,
-  patient: { fullName: '', dob: '', memberId: '' },
-  claim: { claimNumber: '', dosStart: '', dosEnd: '' },
+  patient: { fullName: '', dob: '', memberId: '', patientAccountNumber: '' },
+  claim: { claimNumber: '', dosStart: '', dosEnd: '', diagnosisCodes: [] },
   providers: { renderingName: '', renderingNpi: '', billingName: '', billingNpi: '', taxId: '', billingAddress: '' },
   insurance: { payerName: '', payerType: PayerType.Commercial, policyNumber: '', payerAddress: '' },
   claimTotals: { 
@@ -309,13 +309,15 @@ export default function App() {
     doc.text(`Patient: ${data.patient.fullName}`, margin, 51);
     doc.text(`DOB: ${formatUSDate(data.patient.dob)}`, margin, 56);
     doc.text(`Member ID: ${data.patient.memberId}`, margin, 61);
+    doc.text(`Patient Account #: ${data.patient.patientAccountNumber}`, margin, 66);
     doc.text(`Primary Payer Claim #: ${data.claim.claimNumber}`, 100, 51);
-    doc.text(`Check #: ${data.claimTotals.checkNumber || 'N/A'}`, 100, 56);
-    if (data.claimTotals.checkDate) {
-      doc.text(`Check Date: ${formatUSDate(data.claimTotals.checkDate)}`, 100, 61);
-    }
+    doc.text(`Diagnosis Codes: ${data.claim.diagnosisCodes.join(', ')}`, 100, 56);
+    doc.text(`Check #: ${data.claimTotals.checkNumber || 'N/A'}`, 100, 61);
     
-    let currentDetailsY = data.claimTotals.checkDate ? 66 : 61;
+    let currentDetailsY = data.claimTotals.checkDate ? 71 : 66;
+    if (data.claimTotals.checkDate) {
+      doc.text(`Check Date: ${formatUSDate(data.claimTotals.checkDate)}`, 100, 66);
+    }
     
     if (data.claimTotals.checkDetails) {
       doc.setFontSize(7);
@@ -345,23 +347,41 @@ export default function App() {
     }
 
     // Service Lines Table
-    const tableData = data.serviceLines.map(l => [
-      formatUSDate(l.dateOfService),
-      `${l.cpt}${l.modifiers ? `-${l.modifiers}` : ''}`,
-      l.units,
-      formatCurrency(l.billedAmount),
-      formatCurrency(l.allowedAmount),
-      formatCurrency(l.paidAmount),
-      l.adjustments.map(a => `${a.groupCode}-${a.carc}${a.rarc ? ` (${a.rarc})` : ''}`).join(', '),
-      formatCurrency(l.patientResponsibility.deductible + l.patientResponsibility.coinsurance + l.patientResponsibility.copay)
-    ]);
+    const tableData = data.serviceLines.map(l => {
+      const allAdjustments = [];
+      if (l.patientResponsibility.deductible > 0) {
+        allAdjustments.push(`${formatCurrency(l.patientResponsibility.deductible)} PR-1\n${l.patientResponsibility.deductibleDescription || getCarcDescription('1')}`);
+      }
+      if (l.patientResponsibility.coinsurance > 0) {
+        allAdjustments.push(`${formatCurrency(l.patientResponsibility.coinsurance)} PR-2\n${getCarcDescription('2')}`);
+      }
+      if (l.patientResponsibility.copay > 0) {
+        allAdjustments.push(`${formatCurrency(l.patientResponsibility.copay)} PR-3\n${getCarcDescription('3')}`);
+      }
+      l.adjustments.forEach(a => {
+        allAdjustments.push(`${formatCurrency(a.amount)} ${a.groupCode}-${a.carc}${a.rarc ? ` (${a.rarc})` : ''}\n${a.description || getCarcDescription(a.carc)}`);
+      });
+
+      return [
+        formatUSDate(l.dateOfService),
+        `${l.cpt}${l.modifiers ? `-${l.modifiers}` : ''}`,
+        l.units,
+        formatCurrency(l.billedAmount),
+        formatCurrency(l.allowedAmount),
+        formatCurrency(l.paidAmount),
+        allAdjustments.join('\n\n'),
+        formatCurrency(l.patientResponsibility.deductible + l.patientResponsibility.coinsurance + l.patientResponsibility.copay)
+      ];
+    });
 
     autoTable(doc, {
       startY: data.providers.billingAddress ? 115 : 105,
       head: [['DOS', 'CPT', 'Units', 'Billed', 'Allowed', 'Paid', 'Adjustments', 'Pt Resp']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [15, 23, 42] }
+      headStyles: { fillColor: [15, 23, 42] },
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: { 6: { cellWidth: 60 } }
     });
 
     // Totals
@@ -382,8 +402,6 @@ export default function App() {
     const glossaryY = data.remarks ? finalY + 50 : finalY + 25;
     doc.setFontSize(10);
     doc.text('Adjustment & Remark Code Glossary:', margin, glossaryY);
-    doc.setFontSize(8);
-    let currentY = glossaryY + 6;
 
     const glossaryItems: { group: string; code: string; desc: string }[] = [];
     data.serviceLines.forEach(l => {
@@ -395,25 +413,36 @@ export default function App() {
             desc: a.description || getCarcDescription(a.carc)
           });
         }
+        if (a.rarc && !glossaryItems.find(i => i.group === 'RARC' && i.code === a.rarc)) {
+          glossaryItems.push({
+            group: 'RARC',
+            code: a.rarc,
+            desc: getRarcDescription(a.rarc)
+          });
+        }
       });
+      if (l.patientResponsibility.deductible > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '1')) {
+        glossaryItems.push({ group: 'PR', code: '1', desc: l.patientResponsibility.deductibleDescription || getCarcDescription('1') });
+      }
+      if (l.patientResponsibility.coinsurance > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '2')) {
+        glossaryItems.push({ group: 'PR', code: '2', desc: getCarcDescription('2') });
+      }
+      if (l.patientResponsibility.copay > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '3')) {
+        glossaryItems.push({ group: 'PR', code: '3', desc: getCarcDescription('3') });
+      }
     });
 
-    glossaryItems.forEach(item => {
-      doc.text(`${item.group} ${item.code}: ${item.desc}`, margin, currentY);
-      currentY += 5;
-    });
-
-    // Ensure PR2 is mentioned if not already there
-    if (!glossaryItems.find(i => i.group === 'PR' && i.code === '2')) {
-      doc.text(`PR 2: Coinsurance Amount`, margin, currentY);
-      currentY += 5;
+    if (glossaryItems.length > 0) {
+      autoTable(doc, {
+        startY: glossaryY + 5,
+        head: [['Code', 'Description']],
+        body: glossaryItems.map(item => [`${item.group} ${item.code}`, item.desc]),
+        theme: 'plain',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' } }
+      });
     }
-
-    const uniqueRarcs = Array.from(new Set(data.serviceLines.flatMap(l => l.adjustments.filter(a => a.rarc).map(a => a.rarc!)))) as string[];
-    uniqueRarcs.forEach(code => {
-      doc.text(`RARC ${code}: ${getRarcDescription(code)}`, margin, currentY);
-      currentY += 5;
-    });
 
     doc.save(`EOB_${data.claim.claimNumber}.pdf`);
   };
@@ -439,12 +468,32 @@ export default function App() {
         adjudication: {
           allowed: l.allowedAmount,
           paid: l.paidAmount,
-          adjustments: l.adjustments.map(a => ({
-            group: a.groupCode,
-            code: a.carc,
-            amount: a.amount,
-            description: a.description || getCarcDescription(a.carc)
-          }))
+          adjustments: [
+            ...l.adjustments.map(a => ({
+              group: a.groupCode,
+              code: a.carc,
+              amount: a.amount,
+              description: a.description || getCarcDescription(a.carc)
+            })),
+            ...(l.patientResponsibility.deductible > 0 ? [{
+              group: 'PR',
+              code: '1',
+              amount: l.patientResponsibility.deductible,
+              description: l.patientResponsibility.deductibleDescription || getCarcDescription('1')
+            }] : []),
+            ...(l.patientResponsibility.coinsurance > 0 ? [{
+              group: 'PR',
+              code: '2',
+              amount: l.patientResponsibility.coinsurance,
+              description: getCarcDescription('2')
+            }] : []),
+            ...(l.patientResponsibility.copay > 0 ? [{
+              group: 'PR',
+              code: '3',
+              amount: l.patientResponsibility.copay,
+              description: getCarcDescription('3')
+            }] : [])
+          ]
         }
       }))
     };
@@ -612,11 +661,28 @@ export default function App() {
                     />
                   </div>
                   <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Patient Account Number</label>
+                    <input 
+                      className="input-field" 
+                      value={data.patient.patientAccountNumber || ''} 
+                      onChange={e => updateData(prev => ({ ...prev, patient: { ...prev.patient, patientAccountNumber: e.target.value } }))} 
+                    />
+                  </div>
+                  <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 uppercase">Primary Payer Claim Number</label>
                     <input 
                       className="input-field" 
                       value={data.claim.claimNumber} 
                       onChange={e => updateData(prev => ({ ...prev, claim: { ...prev.claim, claimNumber: e.target.value } }))} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Diagnosis Codes (comma separated)</label>
+                    <input 
+                      className="input-field" 
+                      placeholder="e.g. I10, E11.9"
+                      value={data.claim.diagnosisCodes?.join(', ') || ''} 
+                      onChange={e => updateData(prev => ({ ...prev, claim: { ...prev.claim, diagnosisCodes: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } }))} 
                     />
                   </div>
                   <div className="space-y-1">
@@ -699,7 +765,7 @@ export default function App() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 uppercase">Group Number (Optional)</label>
-                    <input className="input-field" value={data.insurance.groupNumber} onChange={e => updateData(prev => ({ ...prev, insurance: { ...prev.insurance, groupNumber: e.target.value } }))} />
+                    <input className="input-field" value={data.insurance.groupNumber || ''} onChange={e => updateData(prev => ({ ...prev, insurance: { ...prev.insurance, groupNumber: e.target.value } }))} />
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-xs font-bold text-slate-400 uppercase">Payer Address</label>
@@ -848,10 +914,14 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase">Deductible</label>
                           <input type="number" className="input-field text-sm" value={line.patientResponsibility.deductible} onChange={e => updateServiceLine(line.id, { patientResponsibility: { ...line.patientResponsibility, deductible: parseFloat(e.target.value) || 0 } })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">Deductible Desc.</label>
+                          <input className="input-field text-sm" placeholder="Optional description" value={line.patientResponsibility.deductibleDescription || ''} onChange={e => updateServiceLine(line.id, { patientResponsibility: { ...line.patientResponsibility, deductibleDescription: e.target.value } })} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase">Coinsurance</label>
@@ -1158,10 +1228,25 @@ export default function App() {
                             <td className="py-3 text-right">{formatCurrency(l.allowedAmount)}</td>
                             <td className="py-3 text-right font-bold text-success">{formatCurrency(l.paidAmount)}</td>
                             <td className="py-3">
-                              <div className="flex flex-wrap gap-1">
+                              <div className="flex flex-col gap-1">
+                                {l.patientResponsibility.deductible > 0 && (
+                                  <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono w-fit" title={l.patientResponsibility.deductibleDescription || getCarcDescription('1')}>
+                                    {formatCurrency(l.patientResponsibility.deductible)} PR-1
+                                  </span>
+                                )}
+                                {l.patientResponsibility.coinsurance > 0 && (
+                                  <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono w-fit" title={getCarcDescription('2')}>
+                                    {formatCurrency(l.patientResponsibility.coinsurance)} PR-2
+                                  </span>
+                                )}
+                                {l.patientResponsibility.copay > 0 && (
+                                  <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono w-fit" title={getCarcDescription('3')}>
+                                    {formatCurrency(l.patientResponsibility.copay)} PR-3
+                                  </span>
+                                )}
                                 {l.adjustments.map((a, ai) => (
-                                  <span key={ai} className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono" title={a.description || getCarcDescription(a.carc)}>
-                                    {a.groupCode}-{a.carc}{a.rarc ? `:${a.rarc}` : ''}
+                                  <span key={ai} className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono w-fit" title={a.description || getCarcDescription(a.carc)}>
+                                    {formatCurrency(a.amount)} {a.groupCode}-{a.carc}{a.rarc ? `:${a.rarc}` : ''}
                                   </span>
                                 ))}
                               </div>
@@ -1198,7 +1283,23 @@ export default function App() {
                                 desc: a.description || getCarcDescription(a.carc)
                               });
                             }
+                            if (a.rarc && !glossaryItems.find(i => i.group === 'RARC' && i.code === a.rarc)) {
+                              glossaryItems.push({
+                                group: 'RARC',
+                                code: a.rarc,
+                                desc: getRarcDescription(a.rarc)
+                              });
+                            }
                           });
+                          if (l.patientResponsibility.deductible > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '1')) {
+                            glossaryItems.push({ group: 'PR', code: '1', desc: l.patientResponsibility.deductibleDescription || getCarcDescription('1') });
+                          }
+                          if (l.patientResponsibility.coinsurance > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '2')) {
+                            glossaryItems.push({ group: 'PR', code: '2', desc: getCarcDescription('2') });
+                          }
+                          if (l.patientResponsibility.copay > 0 && !glossaryItems.find(i => i.group === 'PR' && i.code === '3')) {
+                            glossaryItems.push({ group: 'PR', code: '3', desc: getCarcDescription('3') });
+                          }
                         });
                         
                         return (

@@ -31,6 +31,7 @@ export interface ServiceLine {
   paidAmount: number;
   patientResponsibility: {
     deductible: number;
+    deductibleDescription?: string;
     coinsurance: number;
     copay: number;
   };
@@ -50,11 +51,13 @@ export interface EOBData {
     fullName: string;
     dob: string;
     memberId: string;
+    patientAccountNumber: string;
   };
   claim: {
     claimNumber: string;
     dosStart: string;
     dosEnd: string;
+    diagnosisCodes: string[];
   };
   providers: {
     renderingName: string;
