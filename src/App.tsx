@@ -311,13 +311,19 @@ export default function App() {
     doc.text(`Member ID: ${data.patient.memberId}`, margin, 61);
     doc.text(`Primary Payer Claim #: ${data.claim.claimNumber}`, 100, 51);
     doc.text(`Check #: ${data.claimTotals.checkNumber || 'N/A'}`, 100, 56);
+    if (data.claimTotals.checkDate) {
+      doc.text(`Check Date: ${formatUSDate(data.claimTotals.checkDate)}`, 100, 61);
+    }
+    
+    let currentDetailsY = data.claimTotals.checkDate ? 66 : 61;
+    
     if (data.claimTotals.checkDetails) {
       doc.setFontSize(7);
-      doc.text(`Details: ${data.claimTotals.checkDetails}`, 100, 60, { maxWidth: 80 });
+      doc.text(`Details: ${data.claimTotals.checkDetails}`, 100, currentDetailsY, { maxWidth: 80 });
       doc.setFontSize(10);
-      doc.text(`DOS: ${formatDosRange(data.claim.dosStart, data.claim.dosEnd)}`, 100, 67);
+      doc.text(`DOS: ${formatDosRange(data.claim.dosStart, data.claim.dosEnd)}`, 100, currentDetailsY + 7);
     } else {
-      doc.text(`DOS: ${formatDosRange(data.claim.dosStart, data.claim.dosEnd)}`, 100, 61);
+      doc.text(`DOS: ${formatDosRange(data.claim.dosStart, data.claim.dosEnd)}`, 100, currentDetailsY);
     }
 
     // Provider Info
@@ -421,6 +427,7 @@ export default function App() {
         taxId: data.providers.taxId,
         claimTotals: {
           ...data.claimTotals,
+          checkDate: data.claimTotals.checkDate ? formatUSDate(data.claimTotals.checkDate) : undefined,
           checkDetails: data.claimTotals.checkDetails
         }
       },
@@ -737,6 +744,10 @@ export default function App() {
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 uppercase">Check/EFT Number</label>
                     <input className="input-field" value={data.claimTotals.checkNumber} onChange={e => updateData(prev => ({ ...prev, claimTotals: { ...prev.claimTotals, checkNumber: e.target.value } }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Check Date</label>
+                    <input type="date" className="input-field" value={data.claimTotals.checkDate || ''} onChange={e => updateData(prev => ({ ...prev, claimTotals: { ...prev.claimTotals, checkDate: e.target.value } }))} />
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-xs font-bold text-slate-400 uppercase">Check/Payment Details</label>
@@ -1057,6 +1068,13 @@ export default function App() {
                         <div className="mt-1">
                           <div className="text-[10px] text-slate-400 uppercase font-bold">Check/EFT #</div>
                           <div className="text-xs font-mono font-bold">{data.claimTotals.checkNumber}</div>
+                        </div>
+                      )}
+
+                      {data.claimTotals.checkDate && (
+                        <div className="mt-1">
+                          <div className="text-[10px] text-slate-400 uppercase font-bold">Check Date</div>
+                          <div className="text-xs font-mono font-bold">{formatUSDate(data.claimTotals.checkDate)}</div>
                         </div>
                       )}
 

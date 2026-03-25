@@ -78,6 +78,7 @@ export interface EOBData {
     patientResponsibility: number;
     paymentDate: string;
     checkNumber: string;
+    checkDate?: string;
     checkDetails?: string;
   };
   serviceLines: ServiceLine[];
